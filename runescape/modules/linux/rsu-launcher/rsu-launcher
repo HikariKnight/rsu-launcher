@@ -1,0 +1,457 @@
+#!/usr/bin/perl -w
+use Wx::Perl::Packager;
+# Be strict to avoid messy code
+use strict;
+
+# Use FindBin module to get script directory
+use FindBin;
+
+# Name of our xrc gui resource file
+my $xrc_gui_file = "rsu-launcher.xrc";
+
+# Disable buffering
+$|=1;
+
+# Get script directory
+my $cwd = $FindBin::RealBin;
+# Get script filename
+my $scriptname = $FindBin::Script;
+# Detect the current OS
+my $OS = "$^O";
+
+# Make a variable for users homedir
+my $HOME;
+# If we are on windows
+if ($OS =~ /MSWin32/)
+{
+	# Get the environment variable for USERPROFILE
+	$HOME = $ENV{"USERPROFILE"};
+	# Replace all / with \
+	$HOME =~ s/\//\\/g;
+}
+# Else we are on UNIX
+else
+{
+	$HOME = $ENV{"HOME"};
+}
+
+#---------------------------------------- *** ----------------------------------------
+#---------------------------------------- *** ----------------------------------------
+#---------------------------------------- *** ----------------------------------------
+
+package wxTopLevelFrame;
+
+use Wx qw[:everything];
+use Wx::XRC;
+use Wx::WebView;
+# Which events shall we include
+use Wx::Event qw(EVT_BUTTON);
+
+use base qw(Wx::Frame);
+
+sub new
+{
+	# Create a class
+	my $class = shift;
+	
+	# Assign class object to $self
+	my $self = $class->SUPER::new;
+	
+	# Initialize everything
+	$self->initialize;
+	
+	return $self;
+}
+
+sub initialize
+{
+	# Get pointers
+	my $self = shift;
+	
+	# Create mutators for widgets (enter the objectname for every object here)
+	$self->create_mutator
+	(
+		qw
+		(
+			xrc_resource
+		)
+	);
+	
+	load_xrc_gui($self);
+	
+	set_layout($self);
+	
+	set_tooltips($self);
+}
+
+sub load_xrc_gui
+{
+	# Get the pointers
+	my $self = shift;
+	
+	# Get the xrc file
+	my $xrc_file = "$cwd/$xrc_gui_file";
+	
+	# Initialize WX
+	Wx::InitAllImageHandlers();
+	
+	# Create xrc/xml resource
+	$self->xrc_resource = Wx::XmlResource->new;
+	# Initialize handlers
+	$self->xrc_resource->InitAllHandlers;
+	# Load the xrc file
+	$self->xrc_resource->Load($xrc_file);
+	
+	# Tell what window/frame to load
+	$self->xrc_resource->LoadFrame($self,undef,"mainwindow");
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub set_layout
+{
+	# Get the pointers
+	my $self = shift;
+	
+	# Find the widgets
+	# $self->objectname = $self->FindWindow('objectname');
+	
+	# Make a vertical box sizer for use to organize stuff
+	$self->{mainsizer} = Wx::GridSizer->new(1,1,0,0);
+	
+	# Make the mainpanel and add it to the boxsizer
+	$self->{mainpanel} = Wx::Panel->new($self, -1, wxDefaultPosition, wxDefaultSize, );
+	
+	# Create a webview which loads the runescape news page
+	$self->{webview} = Wx::WebView::New($self->{mainpanel}, wxID_ANY,  "http://services.runescape.com/m=news/" );
+	
+	# Create the flexsizer needed for the layout
+	$self->{layoutsizer} = Wx::FlexGridSizer->new(1,2,0,0);
+	
+	# Make the first column and row growable
+	$self->{layoutsizer}->AddGrowableRow(0);
+	$self->{layoutsizer}->AddGrowableCol(0);
+	
+	# Make a scrollable panel for the buttons
+	$self->{buttonpanel} = Wx::ScrolledWindow->new($self, -1, wxDefaultPosition, wxDefaultSize, );
+	
+	# Make a vertical box sizer for use to organize buttons
+	$self->{verticalbuttons} = Wx::BoxSizer->new(wxVERTICAL);
+	
+	# Make buttons
+	make_button($self, "playnow", "Play Now");
+	make_button($self, "update", "Run Updater");
+	make_button($self, "settings", "Settings");
+	make_button($self, "forums", "RS Forums");
+	make_button($self, "linuxthread", "Linux Thread");
+	make_button($self, "about", "About RSU");
+	
+	# Add the sizers and panels together to form the layout
+	$self->{buttonpanel}->SetSizer($self->{verticalbuttons});
+	$self->{layoutsizer}->Add($self->{webview},1,wxEXPAND|wxALL,5);
+	$self->{layoutsizer}->Add($self->{buttonpanel},1,wxEXPAND|wxALL,5);
+	$self->{mainsizer}->Add($self->{mainpanel},1,wxEXPAND|wxALL,0);
+	
+	setScrollBars($self->{buttonpanel});
+	
+	set_events($self);
+	
+	$self->{mainpanel}->SetSizer($self->{layoutsizer});
+	
+	$self->SetSizer( $self->{mainsizer} );
+	
+	$self->{mainsizer}->Fit($self);
+	
+	# Set default size
+	$self->SetSize(790,500);
+	$self->SetMinSize($self->GetSize);
+	
+	# Set the layout
+	$self->Layout;
+	# Refresh window
+	$self->Refresh;
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub setScrollBars
+{
+	# Get the widgets to make scrollable
+	my @scrolledWindows = @_;
+	
+	# Set scroll properties
+	my $pixelsPerUnitX = 0; 
+    my $pixelsPerUnitY = 5; 
+    my $noUnitsX = 0; 
+    my $noUnitsY = 100; 
+	
+	# For each widget to make scrollable
+	foreach my $window (@scrolledWindows)
+	{
+		# Enable scrolling
+		$window->SetScrollbars($pixelsPerUnitX, $pixelsPerUnitY, $noUnitsX, $noUnitsY);
+	} 
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub set_events
+{
+	my $self = shift;
+	
+	# Setup the events
+	# EVT_BUTTON($self, Wx::XmlResource::GetXRCID('objectname'), \&function);
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub make_button
+{
+	my ($self, $button, $label) = @_;
+	
+	# Make a button for the launcher
+	$self->{$button} = Wx::Button->new($self->{buttonpanel}, -1, "$label", wxDefaultPosition, wxDefaultSize, );
+	$self->{verticalbuttons}->Add($self->{$button},0,wxEXPAND|wxALL,5);
+	
+	# Make an event trigger for the newly created button
+	EVT_BUTTON($self->{$button}, -1, \&$button);
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub playnow
+{
+	# If we are not on windows
+	if ($OS !~ /MSWin32/)
+	{
+		# Run the runescape script
+		system "\"$cwd/../../../runescape\" &";
+	}
+	# Else
+	else
+	{
+		# Run the runescape executable
+		system "\"$cwd/runescape.exe\" &";
+	}
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub update
+{
+	# If we are not on windows
+	if ($OS !~ /MSWin32/)
+	{
+		# Run the runescape script
+		system "\"$cwd/../../../update-runescape-client\" &";
+	}
+	# Else
+	else
+	{
+		# Run the runescape executable
+		system "\"$cwd/update-runescape-client.exe\" &";
+	}
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub settings
+{
+	# If we are not on windows
+	if ($OS !~ /MSWin32/)
+	{
+		# Run the runescape script
+		system "\"$cwd/../../../rsu-settings\" &";
+	}
+	# Else
+	else
+	{
+		# Run the runescape executable
+		system "\"$cwd/rsu-settings.exe\" &";
+	}
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub forums
+{
+	# If we are on MacOSX/Darwin
+	if ($OS =~ /darwin/)
+	{
+		# Run the runescape script
+		system "open \"http://services.runescape.com/m=forum/forums.ws\" &";
+	}
+	# Else if we are on windows
+	elsif($OS =~ /MSWin32/)
+	{
+		system "start \"http://services.runescape.com/m=forum/forums.ws\" &";
+	}
+	# Else
+	else
+	{
+		# Run the runescape executable
+		system "xdg-open \"http://services.runescape.com/m=forum/forums.ws\" &";
+	}
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub linuxthread
+{
+	# If we are on MacOSX/Darwin
+	if ($OS =~ /darwin/)
+	{
+		# Run the runescape script
+		system "open \"http://services.runescape.com/m=forum/forums.ws?25,26,99,61985129,goto,99999\" &";
+	}
+	# Else if we are on windows
+	elsif($OS =~ /MSWin32/)
+	{
+		system "start \"http://services.runescape.com/m=forum/forums.ws?25,26,99,61985129,goto,99999\" &";
+	}
+	# Else
+	else
+	{
+		# Run the runescape executable
+		system "xdg-open \"http://services.runescape.com/m=forum/forums.ws?25,26,99,61985129,goto,99999\" &";
+	}
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub about
+{
+	my $self = shift;
+	
+	# Make the about dialog info
+	my $info = Wx::AboutDialogInfo->new;
+	
+	# Get the rsu client version
+	my $version = `"$cwd/../../../runescape" --version`;
+	
+	# Use regular expression to get only the version number
+	$version =~ s/.+version\s+(\d{1,1}\.\d{1,1}\.\d{1,1})\n/$1/;
+
+	# Add info to the about dialog
+	$info->SetName( 'RuneScape Unix Client' );
+    $info->SetVersion( $version );
+    $info->SetDescription( 'The Unofficial Universal Unix port of the RuneScape Downloadable Client for Windows' );
+    $info->SetCopyright( '(c) 2011-2013 HikariKnight' );
+    $info->SetWebSite( 'https://github.com/HikariKnight/rsu-client', 'Get the sourcecode from GitHub.com' );
+    $info->SetDevelopers( ['HikariKnight - Main developer', '', '### Contributors ###', 'Ker Laeda - AUR Repository maintainer', 'Garage Punk - forcepulseaudio code', 'Jmb71 - findjavalib regex', 'Ethoxyethaan - original launch script for Linux' ] );
+
+    $info->SetArtists( [ 'None' ] );
+
+    Wx::AboutBox( $info );
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+
+
+# Create mutator function from "Programming Perl"
+sub create_mutator
+{
+
+	my $self = shift;
+
+	# From "Programming Perl" 3rd Ed. p338.
+	for my $attribute (@_)
+	{
+
+		no strict "refs"; # So symbolic ref to typeglob works.
+		no warnings;      # Suppress "subroutine redefined" warning.
+
+		*$attribute = sub : lvalue
+		{
+
+			my $self = shift;
+
+			$self->{$attribute} = shift if @_;
+			$self->{$attribute};
+
+		};
+
+	}
+
+}
+
+
+### Events
+
+sub close_clicked
+{
+	# Get pointers
+	my ($self, $event) = @_;
+	
+	# Close window
+	$self->Destroy();
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub set_tooltips
+{
+	my ($self) = @_;
+		
+	# Set tooltips with info about the settings
+	# $self->objectname->SetToolTip("message");
+	
+}
+
+#---------------------------------------- *** ----------------------------------------
+#---------------------------------------- *** ----------------------------------------
+#---------------------------------------- *** ----------------------------------------
+
+package application;
+use base qw(Wx::App);
+
+sub OnInit
+{
+	# Get pointers
+	my $self = shift;
+	
+	# Create mainwindow(new window)
+	my $mainwindow = wxTopLevelFrame->new(undef, -1);
+	
+	# Set mainwindo/topwindow
+	$self->SetTopWindow($mainwindow);
+	
+	# Show the window
+	$mainwindow->Show(1);
+}
+
+#---------------------------------------- *** ----------------------------------------
+#---------------------------------------- *** ----------------------------------------
+#---------------------------------------- *** ----------------------------------------
+
+
+package main;
+
+my $app = application->new;
+$app->MainLoop;
+
