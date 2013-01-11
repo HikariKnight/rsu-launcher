@@ -1,0 +1,52 @@
+#!/usr/bin/perl -w
+
+# Be strict to avoid messy code
+use strict;
+
+# Use FindBin module to get script directory
+use FindBin;
+
+# Get script directory
+my $cwd = $FindBin::RealBin;
+# Get script filename
+my $scriptname = $FindBin::Script;
+# Detect the current OS
+my $OS = "$^O";
+
+# run the script
+main();
+
+sub main
+{
+	# Get the architecture
+	my $arch = `uname -m`;
+	
+	# If we are on 64bit
+	if ($arch =~ /(x86_64|amd64)/)
+	{
+		# Use x86_64 as architecture
+		$arch = "-x86_64";
+	}
+	# Else if we are on 32bit
+	elsif($arch =~ /i\d{1,1}86/)
+	{
+		# Use i386 as architecture
+		$arch = "-i386";
+	}
+	# Else we are on an architecture that does not support the launcher
+	else
+	{
+		# Install the menu icons and launch runescape
+		system "$cwd/install-desktop-icons & $cwd/runescape";
+		
+		# Exit once we are done so we dont trigger the launcher
+		exit;
+	}
+	
+	system "$cwd/modules/$OS/rsu-launcher/rsu-launcher$arch &";
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
