@@ -1,5 +1,5 @@
 #!/usr/bin/perl -w
-use Wx::Perl::Packager;
+
 # Be strict to avoid messy code
 use strict;
 
@@ -145,6 +145,7 @@ sub set_layout
 	make_button($self, "update", "Run Updater");
 	make_button($self, "settings", "Settings");
 	make_button($self, "forums", "RS Forums");
+	$self->{verticalbuttons}->Add(1,1,1);
 	make_button($self, "linuxthread", "Linux Thread");
 	make_button($self, "about", "About RSU");
 	
