@@ -13,10 +13,10 @@ this will install pp and wxpar.
 now go to this directory and run (replace $citrusperldir with the location of citrus perl)
 
 for 64bit:
-$citrusperldir/site/bin/wxpar -gui -o rsu-launcher-x86_64 rsu-launcher
+$citrusperldir/site/bin/wxpar -gui -o rsu-launcher-x86_64 rsu-launcher_loader.pl
 
 for 32bit:
-$citrusperldir/site/bin/wxpar -gui -o rsu-launcher-i386 rsu-launcher
+$citrusperldir/site/bin/wxpar -gui -o rsu-launcher-i386 rsu-launcher_loader.pl
 
 this will package the rsu-launcher with wxwidgets2.9 however
 IF you get more than 3 warnings about missing .so files when packaging
