@@ -359,7 +359,7 @@ sub about
     $info->SetDescription( 'The Unofficial Universal Unix port of the RuneScape Downloadable Client for Windows' );
     $info->SetCopyright( '(c) 2011-2013 HikariKnight' );
     $info->SetWebSite( 'https://github.com/HikariKnight/rsu-client', 'Get the sourcecode from GitHub.com' );
-    $info->SetDevelopers( ['HikariKnight - Main developer', '', '### Contributors ###', 'Ker Laeda - AUR Repository maintainer', 'Garage Punk - forcepulseaudio code', 'Jmb71 - findjavalib regex', 'Ethoxyethaan - original launch script for Linux' ] );
+    $info->SetDevelopers( ['HikariKnight - Main developer', '', '### Contributors ###', 'Ker Laeda - AUR Repository maintainer', 'Garage Punk - forcepulseaudio code', 'Jmb71 - findjavalib regex', 'Ethoxyethaan - original launch script for Linux', 'Fallen_Unia - Zenity support in the Updater' ] );
 
     $info->SetArtists( [ 'None' ] );
 
