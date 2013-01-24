@@ -43,7 +43,7 @@ sub main
 		exit;
 	}
 	
-	system "$cwd/modules/$OS/rsu-launcher/rsu-launcher$arch &";
+	system "$cwd/modules/universal/rsu-launcher/rsu-launcher$arch &";
 }
 
 #
