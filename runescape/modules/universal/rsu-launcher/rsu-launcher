@@ -29,7 +29,7 @@ BEGIN
 }
 
 # Name of our xrc gui resource file
-my $xrc_gui_file = "rsu-launcher.xrc";
+my $xrc_gui_file = "../../universal/rsu-launcher/rsu-launcher.xrc";
 
 # Disable buffering
 $|=1;
@@ -270,13 +270,7 @@ sub playnow
 sub update
 {
 	# If we are not on windows
-	if ($OS !~ /MSWin32/)
-	{
-		# Run the runescape script
-		system "\"$cwd/../../../update-runescape-client\" &";
-	}
-	# Else
-	else
+	if ($OS =~ /MSWin32/)
 	{
 		# Get the handle for the perl window
 		my $cmdwindow = Win32::GUI::GetPerlWindow();
@@ -289,6 +283,17 @@ sub update
 		# Show the cmd window again
 		Win32::GUI::Hide($cmdwindow);
 		
+	}
+	elsif ($OS =~ /darwin/)
+	{
+		# Run the update script
+		system "open \"$cwd/../../../update-runescape-client\" &";
+	}
+	# Else
+	else
+	{
+		# Run the update script
+		system "open \"$cwd/../../../update-runescape-client\" &";
 	}
 }
 

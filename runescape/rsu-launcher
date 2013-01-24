@@ -43,7 +43,24 @@ sub main
 		exit;
 	}
 	
-	system "$cwd/modules/universal/rsu-launcher/rsu-launcher$arch &";
+	# If we are on Linux
+	if($OS =~ /linux/)
+	{
+		# Launch the launcher for the correct architecture
+		system "$cwd/modules/linux/rsu-launcher/rsu-launcher$arch &";
+	}
+	# Else if we are on darwin/osx
+	elsif($OS =~ /darwin/)
+	{
+		# Launch the launcher for mac osx
+		system "$cwd/modules/$OS/rsu-launcher/rsu-launcher-$OS &";
+	}
+	# Else
+	else
+	{
+		# Launch the launcher for the correct OS
+		system "$cwd/modules/$OS/rsu-launcher/rsu-launcher$arch &";
+	}
 }
 
 #

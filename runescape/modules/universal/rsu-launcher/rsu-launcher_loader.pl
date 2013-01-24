@@ -80,8 +80,18 @@ if ("@ARGV" =~ /(-|--)script=/)
 		}
 	}
 	
-	# Load the specified script
-	require "$FindBin::RealBin/$loader_script";
+	# If we are on windows
+	if ($OS =~ /MSWin32/)
+	{
+		# Load the specified script
+		require "$FindBin::RealBin/$loader_script";
+	}
+	# Else
+	else
+	{
+		# Load the specified script
+		require "$FindBin::RealBin/../../../$loader_script";
+	}
 }
 # Else
 else
@@ -94,12 +104,13 @@ else
 		# will let the perl script run inside the compressed perl)
 		require "$FindBin::RealBin/modules/universal/rsu-launcher/rsu-launcher";
 	}
+	# Else
 	else
 	{
 		# Load the runescape script inside this loader 
 		#(if this loader is packaged with PAR::Packer this 
 		# will let the perl script run inside the compressed perl)
-		require "$FindBin::RealBin/rsu-launcher";
+		require "$FindBin::RealBin/../../universal/rsu-launcher/rsu-launcher";
 	}
 }
 
