@@ -37,7 +37,7 @@ sub main
 	else
 	{
 		# Install the menu icons and launch runescape
-		system "$cwd/install-desktop-icons & $cwd/runescape";
+		system "$cwd/install-desktop-icons & $cwd/runescape @ARGV";
 		
 		# Exit once we are done so we dont trigger the launcher
 		exit;
@@ -47,19 +47,19 @@ sub main
 	if($OS =~ /linux/)
 	{
 		# Launch the launcher for the correct architecture
-		system "$cwd/modules/linux/rsu-launcher/rsu-launcher$arch &";
+		system "$cwd/modules/linux/rsu-launcher/rsu-launcher$arch @ARGV &";
 	}
 	# Else if we are on darwin/osx
 	elsif($OS =~ /darwin/)
 	{
 		# Launch the launcher for mac osx
-		system "$cwd/modules/$OS/rsu-launcher/rsu-launcher-$OS &";
+		system "$cwd/modules/$OS/rsu-launcher/rsu-launcher-$OS @ARGV &";
 	}
 	# Else
 	else
 	{
 		# Launch the launcher for the correct OS
-		system "$cwd/modules/$OS/rsu-launcher/rsu-launcher$arch &";
+		system "$cwd/modules/$OS/rsu-launcher/rsu-launcher$arch @ARGV &";
 	}
 }
 
