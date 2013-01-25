@@ -42,6 +42,9 @@ my $scriptname = $FindBin::Script;
 # Detect the current OS
 my $OS = "$^O";
 
+# Make a variable for the clientdir
+my $clientdir = $cwd;
+
 # Make a variable for users homedir
 my $HOME;
 # If we are on windows
@@ -57,7 +60,18 @@ if ($OS =~ /MSWin32/)
 # Else we are on UNIX
 else
 {
+	# Make the $clientdir point to the location of the client files
+	$clientdir = "$cwd/../../../";
+	
+	# Set the $HOME variable to the players home directory
 	$HOME = $ENV{"HOME"};
+}
+
+# If this script have been installed systemwide
+if ($cwd =~ /^(\/usr\/s?bin|\/opt\/runescape|\/usr\/local\/s?bin)/)
+{
+	# Change $clientdir to ~/.config/runescape
+	$clientdir = "$HOME/.config/runescape/";
 }
 
 #---------------------------------------- *** ----------------------------------------
@@ -146,8 +160,14 @@ sub set_layout
 	# Make a vertical box sizer for use to organize stuff
 	$self->{mainsizer} = Wx::GridSizer->new(1,1,0,0);
 	
+	# Make a tabbed window(wxNoteBook) for the launcher
+	$self->{tabcontrol} = Wx::Notebook->new($self,-1,wxDefaultPosition, wxDefaultSize);
+	
 	# Make the mainpanel and add it to the boxsizer
-	$self->{mainpanel} = Wx::ScrolledWindow->new($self, -1, wxDefaultPosition, wxDefaultSize );
+	$self->{mainpanel} = Wx::ScrolledWindow->new($self->{tabcontrol}, -1, wxDefaultPosition, wxDefaultSize );
+
+	# Add the mainpanel to the tabbed window
+	$self->{tabcontrol}->AddPage($self->{mainpanel}, "RSU-Launcher");
 	
 	# Create a webview which loads the runescape news page
 	$self->{webview} = Wx::WebView::New($self->{mainpanel}, wxID_ANY,  "http://services.runescape.com/m=news/" );
@@ -170,16 +190,40 @@ sub set_layout
 	# Add the sizers and panels together to form the layout
 	$self->{layoutsizer}->Add($self->{webview},1,wxEXPAND|wxALL,5);
 	$self->{layoutsizer}->Add($self->{verticalbuttons},0,wxEXPAND|wxALL,5);
-	$self->{mainsizer}->Add($self->{mainpanel},1,wxEXPAND|wxALL,0);
+	$self->{mainsizer}->Add($self->{tabcontrol},1,wxEXPAND|wxALL,0);
 	
+	# Add scrollbars to the mainpanel if needed
 	setScrollBars($self->{mainpanel});
 	
+	# If we are on linux, darwin/mac or windows (which supports addons)
+	if ($OS =~ /(linux|darwin|MSWin32)/)
+	{
+		# Check whats is inside the modules folder
+		opendir(my $modulefolders, "$clientdir/modules") || die "Incomplete client structure! You must reinstall the rsu-client!";
+		
+		# While there is still content inside the folder
+		while (readdir $modulefolders)
+		{
+			# If the current content is the addons folder
+			if ($_ =~ /^addons$/ && -d "$clientdir/modules/$_")
+			{
+				# Add the addons/module page
+				create_addons_page($self);
+			}
+		}
+		
+		# Close the directory to free up memory
+		closedir($modulefolders);
+	}
+	
+	# Set the events
 	set_events($self);
 	
+	# Add the contents of the layoutsizer to the mainpanel
 	$self->{mainpanel}->SetSizer($self->{layoutsizer});
-	
+	# Set the sizer for the window itself
 	$self->SetSizer( $self->{mainsizer} );
-	
+	# Make everything inside the mainsizer fit the window
 	$self->{mainsizer}->Fit($self);
 	
 	# Set default size
@@ -190,6 +234,127 @@ sub set_layout
 	$self->Layout;
 	# Refresh window
 	$self->Refresh;
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub create_addons_page
+{
+	# Get the passed data
+	my ($self) = @_;
+	
+	# Make the new page for the tabbed window
+	$self->{addonspage} = Wx::ScrolledWindow->new($self->{tabcontrol}, -1, wxDefaultPosition, wxDefaultSize, );
+	
+	# Add the page to the tabbed window
+	$self->{tabcontrol}->AddPage($self->{addonspage}, "Installed Add-Ons");
+	
+	# Make sizers for the top of the page
+	$self->{addonsvertical} = Wx::BoxSizer->new(wxVERTICAL);
+	
+	# Make a gridsizer which will contain the addons
+	$self->{addonlist} = Wx::GridSizer->new(1,4,5,5);
+	
+	# Make a button which tells the user how to add addons
+	$self->{addons_labeltop} = Wx::StaticText->new($self->{addonspage}, -1, "\nClick on the button coresponding to the addon you want to manually launch!\nClick the button below to open the addons directory. Install only addons you trust!", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL);
+	
+	# Make a button to open the addons dir and make it run the function open_addonsdir when clicked
+	$self->{addonsdirbutton} = Wx::Button->new($self->{addonspage}, -1, "Open Addons Folder (place extracted addons here)", wxDefaultPosition, wxDefaultSize, );
+	EVT_BUTTON($self, $self->{addonsdirbutton}, \&open_addonsdir);
+	
+	# Add the label and button to the vertical boxsizer
+	$self->{addonsvertical}->Add($self->{addons_labeltop}, 0, wxALL|wxALIGN_CENTER,0);
+	$self->{addonsvertical}->Add($self->{addonsdirbutton}, 0, wxALL|wxALIGN_CENTER,0);
+	$self->{addonsvertical}->Add(10,10,0,0);
+	
+	# Make a groupbox for tidyness
+	$self->{addonsbox} = Wx::StaticBox->new($self->{addonspage},-1, "Addons you have installed (Note: Avoid having addons with identical names)");
+	$self->{addonscontainer} = Wx::StaticBoxSizer->new($self->{addonsbox},wxVERTICAL); 
+	
+	# Add the addonslist to the container
+	$self->{addonscontainer}->Add($self->{addonlist},0,wxEXPAND|wxALL,0);
+	
+	# Add the gridsizer to the vertical boxsizer
+	$self->{addonsvertical}->Add($self->{addonscontainer},1,wxEXPAND|wxALL,0);
+	
+	# Open the addons directory
+	opendir(my $addondirs, "$clientdir/modules/addons/");
+	
+	# While there is still content in the folder
+	while (readdir $addondirs)
+	{
+		# If the current content is either named universal or the same as $OS
+		if (($_ =~ /^universal$/ && -d "$clientdir/modules/addons/$_") || ($_ =~ /^$OS$/ && -d "$clientdir/modules/addons/$_"))
+		{
+			# Make the addons buttons
+			make_addon_buttons($self, "$clientdir/modules/addons/$_");
+		}
+	}
+	
+	# Close the directory to free memory
+	closedir($addondirs);
+	
+	# Make sure the layout is displayed properly
+	$self->{addonspage}->SetSizer($self->{addonsvertical});
+	$self->{addonsvertical}->Fit($self->{addonspage});
+	$self->{addonspage}->Layout();
+	
+	# Add scrollbars if neccessary
+	setScrollBars($self->{addonspage});
+	
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub make_addon_buttons
+{
+	# Get the passed data
+	my ($self, $addondir) = @_;
+	
+	# Make a counter so we know when to add a new row to the grid
+	my $counter = 1;
+	
+	# Open the addon directory
+	opendir(my $addons, $addondir);
+	
+	# While there is still content in the directory
+	while (readdir $addons)
+	{
+		# Go to next if the current content is a relative directory (. or ..) or if the folder is named framework
+		next if $_ =~ /^(\.|\.\.|framework)$/;
+		
+		# Pass the current addon to a variable we can reuse as $_ gets overwritten later
+		my $addon = $_;
+		
+		# If $counter is a modulo of 4 (translation: every 4th)
+		if (($counter %= 4) == 0)
+		{
+			print "1\n";
+			# Increase the amount of rows by 1
+			$self->{addonlist}->SetRows($self->{addonlist}->GetRows()+1);
+			
+			#$counter = 0;
+		}
+		
+		# Make a button for the addon
+		$self->{$addon} = Wx::Button->new($self->{addonspage}, -1, "$addon", wxDefaultPosition, wxDefaultSize, );
+		
+		# Make an event trigger for the newly created button
+		EVT_BUTTON($self, -1, \&launch_addon);
+		
+		# Add the button to the vertical addon list sizer
+		$self->{addonlist}->Add($self->{$addon}, 0, wxEXPAND|wxALL,5);
+		
+		# Increase counter by 1
+		$counter += 1;
+	}
+	
+	# Close the directory to free memory
+	closedir($addons);
 }
 
 #
@@ -269,6 +434,9 @@ sub playnow
 
 sub update
 {
+	# Get the passed data
+	my ($self, $event) = @_;
+	
 	# If we are not on windows
 	if ($OS =~ /MSWin32/)
 	{
@@ -405,7 +573,70 @@ sub about
 #---------------------------------------- *** ----------------------------------------
 #
 
+sub launch_addon
+{
+	# Get the passed data
+	my ($self, $event) = @_;
+	
+	# Get the name of the addon that triggered the event
+	my $addon = $event->GetEventObject()->GetLabel();
+	
+	# Open the universal addon directory
+	opendir (my $addons, "$clientdir/modules/addons/universal/");
+	
+	# While there is still content in the folder
+	while (readdir $addons)
+	{
+		# Go to next if the current content is not the folder for this addon
+		next if $_ !~ /^$addon$/;
+		
+		# If we are on windows
+		if ($OS =~ /MSWin32/)
+		{
+			# Launch the addon
+			system (1,"\"$cwd/rsu-launcher.exe\" --script=modules/addons/universal/$addon/moduleloader.pl &");
+		}
+		# Else
+		else
+		{
+			# Launch the addon using perl
+			system "perl -w \"$clientdir/modules/addons/universal/$addon/moduleloader.pl\" &";
+		}
+	}
+	
+	# Close the directory to free memory
+	closedir($addons);
+	
+	# Open the platform specific addons directory
+	opendir (my $platform_addons, "$clientdir/modules/addons/$OS/");
+	
+	# While there is still content in the folder
+	while (readdir $platform_addons)
+	{
+		# Go to next if the current content is not the folder for this addon
+		next if $_ !~ /^$addon$/;
+		
+		# If we are on windows
+		if ($OS =~ /MSWin32/)
+		{
+			# Launch the addon
+			system (1,"\"$cwd/rsu-launcher.exe\" --script=modules/addons/$OS/$addon/moduleloader.pl &");
+		}
+		# Else
+		else
+		{
+			# Launch the addon using perl
+			system "perl -w \"$clientdir/modules/addons/$OS/$addon/moduleloader.pl\" &";
+		}
+	}
+	
+	# Close the directory to free memory
+	closedir($platform_addons);
+}
 
+#
+#---------------------------------------- *** ----------------------------------------
+#
 
 # Create mutator function from "Programming Perl"
 sub create_mutator
@@ -434,6 +665,40 @@ sub create_mutator
 
 }
 
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub open_addonsdir
+{
+	# Get the pointers
+	my ($self,$event) = @_;
+	
+	# Put the path to the addons directory into a variable
+	my $addonsdir = "$clientdir/modules/addons";
+	
+	# If we are on windows
+	if ($OS =~ /MSWin32/)
+	{
+		# Replace all / with \
+		$addonsdir =~ s/\//\\/g;
+		
+		# Open the addons directory
+		system (1,"explorer.exe \"addonsdir\"");
+	}
+	# Else if we are on darwin/mac
+	elsif($OS =~ /darwin/)
+	{
+		# Open the addons directory
+		system "open \"$addonsdir/\"";
+	}
+	# Else
+	else
+	{
+		# Open the addons directory
+		system "xdg-open \"$addonsdir/\"";
+	}
+}
 
 ### Events
 
