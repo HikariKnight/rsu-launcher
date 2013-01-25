@@ -13,6 +13,9 @@ my $scriptname = $FindBin::Script;
 # Detect the current OS
 my $OS = "$^O";
 
+# URL for the maclibs download
+my $maclib_url = "https://dl.dropbox.com/u/11631899/opensource/Perl/runescape_unix_client/modules/darwin.tar.gz";
+
 # run the script
 main();
 
@@ -52,6 +55,9 @@ sub main
 	# Else if we are on darwin/osx
 	elsif($OS =~ /darwin/)
 	{
+		# Run a check to see if the mac libraries are installed
+		checkformaclibs();
+		
 		# Launch the launcher for mac osx
 		system "$cwd/modules/$OS/rsu-launcher/rsu-launcher-$OS @ARGV &";
 	}
@@ -60,6 +66,64 @@ sub main
 	{
 		# Launch the launcher for the correct OS
 		system "$cwd/modules/$OS/rsu-launcher/rsu-launcher$arch @ARGV &";
+	}
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub fetchmaclibs
+{
+	# Download the perl bundle containing the libraries and extract the archive inside the modules folder
+	system "cd \"$cwd/modules\" && curl -o \"$cwd/modules/darwin.tar.gz\" $maclib_url && tar -zxvf \"$cwd/modules/darwin.tar.gz\" && rm \"$cwd/modules/darwin.tar.gz\"";
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub checkformaclibs
+{
+	# Make a variable to contain the directory list
+	my $maclibs;
+	
+	if ($OS =~ /darwin/)
+	{
+		# Get a list of files in the client directory
+		$maclibs = `ls "$cwd/modules"`;
+	}
+	
+	# If we are running on darwin/MacOSX and the darwin folder does not exist
+	if ($OS =~ /darwin/ && $maclibs !~ /darwin/)
+	{
+		# Display a message prompting the user to download an archive file containing the rsu-settings_mac loader(self contained minimal wxperl) and the wxWidgets libraries.
+		print "The rsu-launcher requires extra libraries on MacOSX
+(because apple broke their own in 10.5 and up)
+So i have packaged a custom loader with a working version of wxWidgets
+for use by this script to save you 1 - 2 hours of your life
+compiling it yourself.
+
+NOTE: If you want the sourcecode for the loader,
+go to $cwd/modules/$OS/rsu-launcher/rsu-launcher-$OS
+and add .zip behind the \"rsu-launcher-$OS\" and extract the archive.
+
+Is it ok for me to download these libraries into the client directory?
+Answer with yes or no (default = yes):";
+
+		# Wait for users answer
+		my $answer = <STDIN>;
+		
+		# If the user answers no
+		if ($answer =~ /(no|n)/i)
+		{
+			# Exit the script
+			exit;
+		}
+		else
+		{
+			fetchmaclibs();
+		}
 	}
 }
 
