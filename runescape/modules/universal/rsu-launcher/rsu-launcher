@@ -601,7 +601,7 @@ sub launch_addon
 		else
 		{
 			# Launch the addon using perl
-			system "perl -w \"$clientdir/modules/addons/universal/$addon/moduleloader.pl\" &";
+			system "\"$cwd/../../../rsu-launcher\" --script=modules/addons/universal/$addon/moduleloader.pl &";
 		}
 	}
 	

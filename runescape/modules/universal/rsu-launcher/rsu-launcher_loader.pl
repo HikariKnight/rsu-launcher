@@ -3,6 +3,9 @@
 # Use FindBin module to get script directory
 use FindBin;
 
+# Get the $cwd
+my $cwd = $FindBin::RealBin;
+
 # Load the required Wx modules
 use Wx::Perl::Packager;
 use Wx qw[:everything];
@@ -79,18 +82,31 @@ if ("@ARGV" =~ /(-|--)script=/)
 			push(@ARGV, "--scriptpath=$loader_arg");
 		}
 	}
-	
+		
 	# If we are on windows
 	if ($OS =~ /MSWin32/)
 	{
 		# Load the specified script
-		require "$FindBin::RealBin/$loader_script";
+		require "$cwd/$loader_script";
 	}
 	# Else
 	else
 	{
-		# Load the specified script
-		require "$FindBin::RealBin/../../../$loader_script";
+		# If this script have a working directory in a system path
+		if ($cwd =~ /^(\/usr\/s?bin|\/opt\/runescape|\/usr\/local\/s?bin)/)
+		{
+			# Change the cwd to $HOME/.config/runescape
+			$cwd = $ENV{"HOME"}."/.config/runescape";
+			
+			# Load the specified script
+			require "$cwd/$loader_script";	
+		}
+		# Else
+		else
+		{
+			# Load the specified script
+			require "$cwd/../../../$loader_script";
+		}
 	}
 }
 # Else
