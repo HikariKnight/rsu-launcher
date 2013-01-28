@@ -552,11 +552,24 @@ sub about
 	# Make the about dialog info
 	my $info = Wx::AboutDialogInfo->new;
 	
-	# Get the rsu client version
-	my $version = `"$cwd/../../../runescape" --version`;
+	# Make a variable to contain the version number
+	my $version;
+	
+	# If we are on windows
+	if ($OS =~ /MSWin32/)
+	{
+		# Launch the runescape script and get the version
+		$version = `"$cwd/rsu-launcher" --script=runescape --showcmd=true --version`;
+	}
+	# Else
+	else
+	{
+		# Launch the runescape script and get the version
+		$version = `"$cwd/../../../runescape" --version`;
+	}
 	
 	# Use regular expression to get only the version number
-	$version =~ s/.+version\s+(\d{1,1}\.\d{1,1}\.\d{1,1})\n/$1/;
+	$version =~ s/.+version\s+(\d{1,1}\.\d{1,1}\.\d{1,1})\s+/$1/;
 
 	# Add info to the about dialog
 	$info->SetName( 'RuneScape Unix Client' );
