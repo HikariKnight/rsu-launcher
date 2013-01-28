@@ -29,6 +29,7 @@ if ("$^O" =~ /MSWin32/)
 	eval "use Win32::API";
 	eval "use File::DosGlob";
 	eval "use Tie::Scalar";
+	eval "use Win32::FileOp";
 	
 	# Hide the commandline windows
 	eval "use Win32::GUI()";
@@ -84,7 +85,7 @@ if ("@ARGV" =~ /(-|--)script=/)
 	}
 		
 	# If we are on windows
-	if ($OS =~ /MSWin32/)
+	if ($^O =~ /MSWin32/)
 	{
 		# Load the specified script
 		require "$cwd/$loader_script";

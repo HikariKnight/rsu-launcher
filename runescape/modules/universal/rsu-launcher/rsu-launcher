@@ -11,11 +11,12 @@ BEGIN
 
 	# Add the location of our redistributed cpan modules which are not available by default
 	# Translation: Define the $PATH for perl modules
-	use lib $FindBin::RealBin."/modules/universal/framework/perl/modules";
-	use lib $FindBin::RealBin."/modules/$^O/framework/perl/modules";
-	use lib $FindBin::RealBin."/../framework/perl/modules";
-	use lib $FindBin::RealBin."/../../$^O/framework/perl/modules";
-	use lib $FindBin::RealBin."/modules";
+	# Kept this incase i need it in the future
+	#use lib $FindBin::RealBin."/modules/universal/framework/perl/modules";
+	#use lib $FindBin::RealBin."/modules/$^O/framework/perl/modules";
+	#use lib $FindBin::RealBin."/../framework/perl/modules";
+	#use lib $FindBin::RealBin."/../../$^O/framework/perl/modules";
+	#use lib $FindBin::RealBin."/modules";
 
 	# Include OS Specific modules
 	if ($^O  eq "MSWin32")
