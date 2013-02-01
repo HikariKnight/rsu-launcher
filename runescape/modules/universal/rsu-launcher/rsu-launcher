@@ -200,7 +200,7 @@ sub set_layout
 	if ($OS =~ /(linux|darwin|MSWin32)/)
 	{
 		# Check whats is inside the modules folder
-		opendir(my $modulefolders, "$clientdir/modules") || die "Incomplete client structure! You must reinstall the rsu-client!";
+		opendir(my $modulefolders, "$clientdir/modules");
 		
 		# While there is still content inside the folder
 		while (readdir $modulefolders)
