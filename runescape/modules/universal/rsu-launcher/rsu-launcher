@@ -69,7 +69,7 @@ else
 }
 
 # If this script have been installed systemwide
-if ($cwd =~ /^(\/usr\/s?bin|\/opt\/runescape|\/usr\/local\/s?bin)/)
+if ($cwd =~ /^(\/usr\/s?bin|\/opt\/|\/usr\/local\/s?bin)/)
 {
 	# Change $clientdir to ~/.config/runescape
 	$clientdir = "$HOME/.config/runescape/";
