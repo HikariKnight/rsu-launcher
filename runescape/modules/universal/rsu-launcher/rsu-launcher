@@ -220,6 +220,19 @@ sub set_layout
 	# Set the events
 	set_events($self);
 	
+	# If we are on windows and the icon exists
+	if ($OS =~ /MSWin32/ && -e "$cwd/share/runescape.png")
+	{
+		# Set the window icon
+		$self->SetIcon(Wx::Icon->new("$cwd/share/runescape.png", wxBITMAP_TYPE_PNG));
+	}
+	# Else if we are not on windows and the icon exists
+	elsif ($OS !~ /MSWin32/ && -e "$cwd/../../../share/runescape.png")
+	{
+		# Set the window icon
+		$self->SetIcon(Wx::Icon->new("$cwd/../../../share/runescape.png", wxBITMAP_TYPE_PNG));
+	}
+	
 	# Add the contents of the layoutsizer to the mainpanel
 	$self->{mainpanel}->SetSizer($self->{layoutsizer});
 	# Set the sizer for the window itself
