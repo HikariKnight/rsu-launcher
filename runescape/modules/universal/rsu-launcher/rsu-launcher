@@ -16,7 +16,9 @@ BEGIN
 	#use lib $FindBin::RealBin."/modules/$^O/framework/perl/modules";
 	#use lib $FindBin::RealBin."/../framework/perl/modules";
 	#use lib $FindBin::RealBin."/../../$^O/framework/perl/modules";
-	#use lib $FindBin::RealBin."/modules";
+	use lib $FindBin::RealBin."/modules/universal/rsu-launcher/modules";
+	use lib $FindBin::RealBin."/../../universal/rsu-launcher/modules";
+	use lib $FindBin::RealBin."/modules";
 
 	# Include OS Specific modules
 	if ($^O  eq "MSWin32")
@@ -83,9 +85,16 @@ package wxTopLevelFrame;
 
 use Wx qw[:everything];
 use Wx::XRC;
-use Wx::WebView;
 # Which events shall we include
-use Wx::Event qw(EVT_BUTTON);
+use Wx::Event qw(EVT_BUTTON EVT_PAINT);
+
+# Use Wx::WebView if it exists
+eval "use Wx::WebView";
+# Use XML::RSSLite if it exists
+eval "use XML::RSSLite";
+
+# Use LWP::Simple module to get website content (crossplatform)
+use LWP::Simple;
 
 use base qw(Wx::Frame Wx::ScrolledWindow);
 
@@ -170,28 +179,67 @@ sub set_layout
 	# Add the mainpanel to the tabbed window
 	$self->{tabcontrol}->AddPage($self->{mainpanel}, "RSU-Launcher");
 	
-	# Create a webview which loads the runescape news page
-	$self->{webview} = Wx::WebView::New($self->{mainpanel}, wxID_ANY,  "http://services.runescape.com/m=news/" );
+	# If --webview is passed
+	if ("@ARGV" =~ /--webview/)
+	{
+		# Create a webview which loads the runescape news page
+		$self->{webview} = Wx::WebView::New($self->{mainpanel}, wxID_ANY,  "http://services.runescape.com/m=news/" );
+	}
+	# Else
+	else
+	{
+		# Make a scrolledwindow (uses less resources than webview)
+		$self->{rssview} = Wx::ScrolledWindow->new($self->{mainpanel}, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxFULL_REPAINT_ON_RESIZE);
+		
+		EVT_PAINT( $self->{rssview}, \&OnPaint );
+	}
 	
 	# Create the flexsizer needed for the layout
 	$self->{layoutsizer} = Wx::BoxSizer->new(wxHORIZONTAL);#Wx::FlexGridSizer->new(1,2,0,0);
 	
 	# Make a vertical box sizer for use to organize buttons
-	$self->{verticalbuttons} = Wx::BoxSizer->new(wxVERTICAL);
+	$self->{buttonsizer} = Wx::BoxSizer->new(wxVERTICAL);
+	
+	# Create a scrolledwindow for the buttons
+	$self->{verticalbuttons} = Wx::ScrolledWindow->new($self->{mainpanel}, -1, wxDefaultPosition, wxDefaultSize );
 	
 	# Make buttons
 	make_button($self, "playnow", "Play Now");
 	make_button($self, "update", "Run Updater");
 	make_button($self, "settings", "Settings");
 	make_button($self, "forums", "RS Forums");
-	$self->{verticalbuttons}->Add(1,1,1);
+	$self->{buttonsizer}->Add(1,1,1);
 	make_button($self, "linuxthread", "Linux Thread");
 	make_button($self, "about", "About RSU");
 	
+	# Add the webview or rssview to the sizers
+	if ("@ARGV" =~ /--webview/)
+	{
+		# Add the webview to the layout sizer
+		$self->{layoutsizer}->Add($self->{webview},4,wxEXPAND|wxALL,5);
+	}
+	# Else
+	else
+	{
+		# Add the rssview to the layout sizer
+		$self->{layoutsizer}->Add($self->{rssview},4,wxEXPAND|wxALL,5);
+		
+		# Fetch rssfeed
+		fetch_rssnews($self, "http://services.runescape.com/m=news/latest_news.rss");
+		
+		# Add scrollbars to the rssview if needed
+		setScrollBars($self->{rssview});
+	}
+	
 	# Add the sizers and panels together to form the layout
-	$self->{layoutsizer}->Add($self->{webview},1,wxEXPAND|wxALL,5);
-	$self->{layoutsizer}->Add($self->{verticalbuttons},0,wxEXPAND|wxALL,5);
+	$self->{verticalbuttons}->SetSizer($self->{buttonsizer});
+	$self->{layoutsizer}->Add($self->{verticalbuttons},1,wxEXPAND|wxALL,5);
+	# Make everything inside the mainsizer fit the window
+	$self->{layoutsizer}->Fit($self);
 	$self->{mainsizer}->Add($self->{tabcontrol},1,wxEXPAND|wxALL,0);
+	
+	# Add scrollbars to the verticalbuttons if needed
+	setScrollBars($self->{verticalbuttons});
 	
 	# Add scrollbars to the mainpanel if needed
 	setScrollBars($self->{mainpanel});
@@ -248,6 +296,29 @@ sub set_layout
 	$self->Layout;
 	# Refresh window
 	$self->Refresh;
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub OnPaint
+{
+	# Get passed data
+	my ($self, $event) = @_;
+	
+	# Create a painter
+	my $painter = Wx::ClientDC->new($self);
+	
+	# Get the painter width and height
+	my $width = $painter->GetSize()->x;
+	my $height = $painter->GetSize()->y;
+	
+	# Load the backgroundimage for the rss news
+	my $image = Wx::Image->new("$cwd/../../universal/rsu-launcher/bitmaps/bg.jpg", wxBITMAP_TYPE_JPEG);
+	
+	# Rescale the image to fit the scrollwindow
+	$painter->DrawBitmap(Wx::Bitmap->new($image->Rescale($width,$height)),0,0,0);
 }
 
 #
@@ -324,6 +395,141 @@ sub create_addons_page
 #---------------------------------------- *** ----------------------------------------
 #
 
+sub fetch_rssnews
+{
+	# Get the passed data
+	my ($self, $rssurl) = @_;
+	
+	# Make a vertical box sizer for use to organize the rss
+	$self->{rss_sizer} = Wx::BoxSizer->new(wxVERTICAL);
+	
+	# Fetch the recent activity rss feed
+	my $rssfeed = get($rssurl);
+	
+	# Make a hash reference for the RSSLite parser
+	my %rssnews;
+	
+	# Parse the RSSfeed
+	parseRSS(\%rssnews, \$rssfeed);
+	
+	# For each value in the array
+	foreach my $item (@{$rssnews{'item'}})
+	{
+		##### Generate Title #####
+		
+		# Get the news title text so we can format it
+		$rssTitle = "$item->{'title'}";
+		
+		# Fix some formating issues from html
+		$rssTitle =~ s/(&#8217;|&APOS;)/'/gi;
+		$rssTitle =~ s/(&amp;)/&&/gi;
+		$rssTitle =~ s/(&#8211;)/-/gi;
+		$rssTitle =~ s/(&#13;&#10;)//gi;
+		
+		# Make a title label for the news
+		my $newsTitle = Wx::StaticText->new($self->{rssview}, -1, "\n$rssTitle");
+		
+		# Make font bigger
+		$newsTitle->SetFont(Wx::Font->new(14, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, 0, "Times New Roman"));
+		
+		# Change the title color to the same color that Jagex use on news articles
+		$newsTitle->SetForegroundColour(Wx::Colour->new(243,177,63));
+		
+		# Add label to the sizer
+		$self->{rss_sizer}->Add($newsTitle, 0, wxEXPAND|wxALL, 5);
+		
+		##### Generate Date #####
+		
+		# Get the published date so we can remove the unused time
+		my $rssDate = "$item->{'pubDate'}";
+		
+		# Remove the timestamp because it is always 00:00:00 GMT
+		$rssDate =~ s/\s+\d{2,2}:\d{2,2}:\d{2,2}\s+GMT//g;
+		
+		# Make a date label for the news
+		my $newsDate = Wx::StaticText->new($self->{rssview}, -1, "Published: $rssDate");
+		
+		# Change the text color to the same color that Jagex use on news articles
+		$newsDate->SetForegroundColour(Wx::Colour->new(184,184,184));
+		
+		# Make font bigger
+		$newsDate->SetFont(Wx::Font->new(8, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL, 0));
+		
+		# Add label to the sizer
+		$self->{rss_sizer}->Add($newsDate, 0, wxEXPAND|wxLEFT, 25);
+		
+		##### Generate Description #####
+		
+		# Make a variable to contain the description because it needs fixing too
+		my $rssDescription = $item->{'description'};
+		
+		# Remove all tabs
+		$rssDescription =~ s/^\s+//g;
+		
+		# Replace all multiple whitespaces with normal whitespace
+		$rssDescription =~ s/\s+/ /g;
+		
+		# Fix some stuff in the finished activity list
+		$rssDescription =~ s/(&#8217;|&APOS;)/'/gi;
+		$rssDescription =~ s/(&amp;)/&&/gi;
+		$rssDescription =~ s/(&#8211;)/-/gi;
+		$rssDescription =~ s/(&#13;&#10;)//gi;
+		
+		# Make a date label for the news
+		my $newsDescription = Wx::StaticText->new($self->{rssview}, -1, "$rssDescription");
+		
+		# Change the text color to the same color that Jagex use on news articles
+		$newsDescription->SetForegroundColour(Wx::Colour->new(184,184,184));
+		
+		$newsDescription->Wrap(480);
+		
+		# Add label to the sizer
+		$self->{rss_sizer}->Add($newsDescription, 0, wxEXPAND|wxALL, 5);
+		
+		##### Generate Link #####
+		
+		# Make a hyperlink
+		my $rssLink = Wx::Button->new($self->{rssview}, wxID_ANY, "Read More..");
+		
+		# Add a tooltip showing the url to the article
+		$rssLink->SetToolTip("$item->{'link'}");
+		
+		# Connect the hyperlink to an event named hyperlink_clicked
+		EVT_BUTTON($rssLink, -1, \&hyperlink_clicked);
+		
+		# Add a link to the article to the sizer
+		$self->{rss_sizer}->Add($rssLink, 0, wxALL, 0);
+		
+		##### Generate Static Line #####
+		
+		# Add a static line to the sizer to nicely split the newsposts
+		$self->{rss_sizer}->Add(Wx::StaticLine->new($self->{rssview}, -1), 0, wxEXPAND|wxALL, 5);
+	}
+	
+	# Add the sizer to the rssview
+	$self->{rssview}->SetSizer($self->{rss_sizer});
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub hyperlink_clicked
+{
+	# Get pointers
+	my ($self, $event) = @_;
+	
+	# Get the URL we are supposed to launch
+	my $hyperlink = $event->GetEventObject()->GetToolTip()->GetTip();
+	
+	# Open the hyperlink url in the default web browser
+	Wx::LaunchDefaultBrowser("$hyperlink");
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
 sub make_addon_buttons
 {
 	# Get the passed data
@@ -383,7 +589,15 @@ sub setScrollBars
 	
 	# Set scroll properties
 	my $pixelsPerUnitX = 0; 
-    my $pixelsPerUnitY = 5; 
+	my $pixelsPerUnitY = 15; 
+	
+	# If we are using the rssfeed
+	if ("@ARGV" =~ /--rssfeed/)
+	{
+		# Scroll more pixels on the Y axis
+		$pixelsPerUnitY = 30;
+	}
+	
     my $noUnitsX = 0; 
     my $noUnitsY = 100; 
 	
@@ -416,8 +630,8 @@ sub make_button
 	my ($self, $button, $label) = @_;
 	
 	# Make a button for the launcher
-	$self->{$button} = Wx::Button->new($self->{mainpanel}, -1, "$label", wxDefaultPosition, wxDefaultSize, );
-	$self->{verticalbuttons}->Add($self->{$button},0,wxEXPAND|wxALL,5);
+	$self->{$button} = Wx::Button->new($self->{verticalbuttons}, -1, "$label");
+	$self->{buttonsizer}->Add($self->{$button},0,wxEXPAND|wxALL,5);
 	
 	# Make an event trigger for the newly created button
 	EVT_BUTTON($self->{$button}, -1, \&$button);
@@ -509,23 +723,8 @@ sub settings
 
 sub forums
 {
-	# If we are on MacOSX/Darwin
-	if ($OS =~ /darwin/)
-	{
-		# Run the runescape script
-		system "open \"http://services.runescape.com/m=forum/forums.ws\" &";
-	}
-	# Else if we are on windows
-	elsif($OS =~ /MSWin32/)
-	{
-		Win32::FileOp::ShellExecute("http://services.runescape.com/m=forum/forums.ws");
-	}
-	# Else
-	else
-	{
-		# Run the runescape executable
-		system "xdg-open \"http://services.runescape.com/m=forum/forums.ws\" &";
-	}
+	# Open the forums in the default web browser
+	Wx::LaunchDefaultBrowser("http://services.runescape.com/m=forum/forums.ws");
 }
 
 #
@@ -534,24 +733,8 @@ sub forums
 
 sub linuxthread
 {
-	# If we are on MacOSX/Darwin
-	if ($OS =~ /darwin/)
-	{
-		# Open the thread in the users default web browser
-		system "open \"http://services.runescape.com/m=forum/forums.ws?25,26,99,61985129,goto,99999\" &";
-	}
-	# Else if we are on windows
-	elsif($OS =~ /MSWin32/)
-	{
-		# Open the thread in the users default web browser
-		Win32::FileOp::ShellExecute("http://services.runescape.com/m=forum/forums.ws?25,26,99,61985129,goto,99999");
-	}
-	# Else
-	else
-	{
-		# Open the thread in the users default web browser
-		system "xdg-open \"http://services.runescape.com/m=forum/forums.ws?25,26,99,61985129,goto,99999\" &";
-	}
+	# Open the linux thread in the default web browser
+	Wx::LaunchDefaultBrowser("http://services.runescape.com/m=forum/forums.ws?25,26,99,61985129,goto,99999");
 }
 
 #
@@ -1063,4 +1246,3 @@ package main;
 
 my $app = application->new;
 $app->MainLoop;
-
