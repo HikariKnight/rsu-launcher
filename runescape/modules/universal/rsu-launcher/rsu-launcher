@@ -191,7 +191,12 @@ sub set_layout
 		# Make a scrolledwindow (uses less resources than webview)
 		$self->{rssview} = Wx::ScrolledWindow->new($self->{mainpanel}, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxFULL_REPAINT_ON_RESIZE);
 		
-		EVT_PAINT( $self->{rssview}, \&OnPaint );
+		# If we are not on Windows or MaxOSX
+		if ($OS !~ /(MSWin32|darwin)/)
+		{
+			# Make a painting event
+			EVT_PAINT( $self->{rssview}, \&OnPaint );
+		}
 	}
 	
 	# Create the flexsizer needed for the layout
@@ -314,8 +319,21 @@ sub OnPaint
 	my $width = $painter->GetSize()->x;
 	my $height = $painter->GetSize()->y;
 	
-	# Load the backgroundimage for the rss news
-	my $image = Wx::Image->new("$cwd/../../universal/rsu-launcher/bitmaps/bg.jpg", wxBITMAP_TYPE_JPEG);
+	# Make variable to hold our image resource
+	my $image;
+	
+	# If we are on windows
+	if ($OS =~ /MSWin32/)
+	{
+		# Load the backgroundimage for the rss news
+		$image = Wx::Image->new("$cwd/modules/universal/rsu-launcher/bitmaps/bg.jpg", wxBITMAP_TYPE_JPEG);
+	}
+	# Else
+	else
+	{
+		# Load the backgroundimage for the rss news
+		$image = Wx::Image->new("$cwd/../../universal/rsu-launcher/bitmaps/bg.jpg", wxBITMAP_TYPE_JPEG);
+	}
 	
 	# Rescale the image to fit the scrollwindow
 	$painter->DrawBitmap(Wx::Bitmap->new($image->Rescale($width,$height)),0,0,0);
@@ -432,8 +450,12 @@ sub fetch_rssnews
 		# Make font bigger
 		$newsTitle->SetFont(Wx::Font->new(14, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, 0, "Times New Roman"));
 		
-		# Change the title color to the same color that Jagex use on news articles
-		$newsTitle->SetForegroundColour(Wx::Colour->new(243,177,63));
+		# If we are not on Windows or MaxOSX
+		if ($OS !~ /(MSWin32|darwin)/)
+		{
+			# Change the title color to the same color that Jagex use on news articles
+			$newsTitle->SetForegroundColour(Wx::Colour->new(243,177,63));
+		}
 		
 		# Add label to the sizer
 		$self->{rss_sizer}->Add($newsTitle, 0, wxEXPAND|wxALL, 5);
@@ -449,11 +471,15 @@ sub fetch_rssnews
 		# Make a date label for the news
 		my $newsDate = Wx::StaticText->new($self->{rssview}, -1, "Published: $rssDate");
 		
-		# Change the text color to the same color that Jagex use on news articles
-		$newsDate->SetForegroundColour(Wx::Colour->new(184,184,184));
+		# If we are not on Windows or MaxOSX
+		if ($OS !~ /(MSWin32|darwin)/)
+		{
+			# Change the text color to the same color that Jagex use on news articles
+			$newsDate->SetForegroundColour(Wx::Colour->new(184,184,184));
+		}
 		
 		# Make font bigger
-		$newsDate->SetFont(Wx::Font->new(8, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL, 0));
+		$newsDate->SetFont(Wx::Font->new(10, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL, 0));
 		
 		# Add label to the sizer
 		$self->{rss_sizer}->Add($newsDate, 0, wxEXPAND|wxLEFT, 25);
@@ -478,8 +504,12 @@ sub fetch_rssnews
 		# Make a date label for the news
 		my $newsDescription = Wx::StaticText->new($self->{rssview}, -1, "$rssDescription");
 		
-		# Change the text color to the same color that Jagex use on news articles
-		$newsDescription->SetForegroundColour(Wx::Colour->new(184,184,184));
+		# If we are not on Windows or MaxOSX
+		if ($OS !~ /(MSWin32|darwin)/)
+		{
+			# Change the text color to the same color that Jagex use on news articles
+			$newsDescription->SetForegroundColour(Wx::Colour->new(184,184,184));
+		}
 		
 		$newsDescription->Wrap(480);
 		
