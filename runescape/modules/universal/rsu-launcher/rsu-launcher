@@ -440,7 +440,7 @@ sub fetch_rssnews
 		
 		# Fix some formating issues from html
 		$rssTitle =~ s/(&#8217;|&APOS;)/'/gi;
-		$rssTitle =~ s/(&amp;)/&&/gi;
+		$rssTitle =~ s/(&amp;)/&&&&/gi;
 		$rssTitle =~ s/(&#8211;)/-/gi;
 		$rssTitle =~ s/(&#13;&#10;)//gi;
 		
@@ -497,7 +497,7 @@ sub fetch_rssnews
 		
 		# Fix some stuff in the finished activity list
 		$rssDescription =~ s/(&#8217;|&APOS;)/'/gi;
-		$rssDescription =~ s/(&amp;)/&&/gi;
+		$rssDescription =~ s/(&amp;)/&&&&/gi;
 		$rssDescription =~ s/(&#8211;)/-/gi;
 		$rssDescription =~ s/(&#13;&#10;)//gi;
 		
