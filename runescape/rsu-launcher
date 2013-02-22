@@ -70,8 +70,16 @@ sub main
 	# If we are on Linux
 	if($OS =~ /linux/)
 	{
-		# Launch the launcher for the correct architecture
-		system "$cwd/modules/linux/rsu-launcher/rsu-launcher$arch @ARGV &";
+		if ("@ARGV" eq '')
+		{
+			# Launch the universal script for the launcher
+			system "$cwd/modules/universal/rsu-launcher/rsu-launcher --rssfeed";
+		}
+		else
+		{
+			# Launch the launcher for the correct architecture
+			system "$cwd/modules/linux/rsu-launcher/rsu-launcher$arch @ARGV &";
+		}
 	}
 	# Else if we are on darwin/osx
 	elsif($OS =~ /darwin/)

@@ -16,7 +16,9 @@ BEGIN
 	#use lib $FindBin::RealBin."/modules/$^O/framework/perl/modules";
 	#use lib $FindBin::RealBin."/../framework/perl/modules";
 	#use lib $FindBin::RealBin."/../../$^O/framework/perl/modules";
-	#use lib $FindBin::RealBin."/modules";
+	use lib $FindBin::RealBin."/modules/universal/rsu-launcher/modules";
+	use lib $FindBin::RealBin."/../../universal/rsu-launcher/modules";
+	use lib $FindBin::RealBin."/modules";
 
 	# Include OS Specific modules
 	if ($^O  eq "MSWin32")
@@ -83,9 +85,16 @@ package wxTopLevelFrame;
 
 use Wx qw[:everything];
 use Wx::XRC;
-use Wx::WebView;
 # Which events shall we include
-use Wx::Event qw(EVT_BUTTON);
+use Wx::Event qw(EVT_BUTTON EVT_PAINT);
+
+# Use Wx::WebView if it exists
+eval "use Wx::WebView";
+# Use XML::RSSLite if it exists
+eval "use XML::RSSLite";
+
+# Use LWP::Simple module to get website content (crossplatform)
+use LWP::Simple;
 
 use base qw(Wx::Frame Wx::ScrolledWindow);
 
@@ -170,28 +179,85 @@ sub set_layout
 	# Add the mainpanel to the tabbed window
 	$self->{tabcontrol}->AddPage($self->{mainpanel}, "RSU-Launcher");
 	
-	# Create a webview which loads the runescape news page
-	$self->{webview} = Wx::WebView::New($self->{mainpanel}, wxID_ANY,  "http://services.runescape.com/m=news/" );
+	# If --webview is passed
+	if ("@ARGV" =~ /--webview/)
+	{
+		# Create a webview which loads the runescape news page
+		$self->{webview} = Wx::WebView::New($self->{mainpanel}, wxID_ANY,  "http://services.runescape.com/m=news/" );
+	}
+	# Else
+	else
+	{
+		# Make a scrolledwindow (uses less resources than webview)
+		$self->{rssview} = Wx::ScrolledWindow->new($self->{mainpanel}, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxFULL_REPAINT_ON_RESIZE);
+		
+		# If we are not on Windows or MaxOSX
+		if ($OS !~ /(MSWin32|darwin)/)
+		{
+			# Make a painting event
+			#EVT_PAINT( $self->{rssview}, \&OnPaint );
+			$self->{rssview}->SetBackgroundColour(wxBLACK);
+		}
+	}
 	
-	# Create the flexsizer needed for the layout
-	$self->{layoutsizer} = Wx::BoxSizer->new(wxHORIZONTAL);#Wx::FlexGridSizer->new(1,2,0,0);
+	# Create the boxsizer needed for the layout
+	$self->{layoutsizer} = Wx::BoxSizer->new(wxHORIZONTAL);
 	
 	# Make a vertical box sizer for use to organize buttons
-	$self->{verticalbuttons} = Wx::BoxSizer->new(wxVERTICAL);
+	$self->{buttonsizer} = Wx::BoxSizer->new(wxVERTICAL);
+	
+	# Create a scrolledwindow for the buttons
+	$self->{verticalbuttons} = Wx::ScrolledWindow->new($self->{mainpanel}, -1, wxDefaultPosition, wxDefaultSize );
 	
 	# Make buttons
-	make_button($self, "playnow", "Play Now");
-	make_button($self, "update", "Run Updater");
-	make_button($self, "settings", "Settings");
-	make_button($self, "forums", "RS Forums");
-	$self->{verticalbuttons}->Add(1,1,1);
-	make_button($self, "linuxthread", "Linux Thread");
-	make_button($self, "about", "About RSU");
+	make_button($self, "playnow", "&Play Now");
+	make_button($self, "update", "Run &Updater");
+	make_button($self, "settings", "&Settings");
+	make_button($self, "forums", "RS &Forums");
+	$self->{buttonsizer}->Add(1,1,1);
+	make_button($self, "linuxthread", "&Linux Thread");
+	
+	# If we are on MacOSX
+	if ($OS =~ /darwin/)
+	{
+		# Use the fallback/old aboutdialog as mac have issues with the modern one
+		make_button($self, "about_FALLBACK", "&About RSU");
+	}
+	# Else
+	else
+	{
+		# Use the new and improved aboutdialog
+		make_button($self, "about", "&About RSU");
+	}
+	
+	# Add the webview or rssview to the sizers
+	if ("@ARGV" =~ /--webview/)
+	{
+		# Add the webview to the layout sizer
+		$self->{layoutsizer}->Add($self->{webview},4,wxEXPAND|wxALL,5);
+	}
+	# Else
+	else
+	{
+		# Add the rssview to the layout sizer
+		$self->{layoutsizer}->Add($self->{rssview},4,wxEXPAND|wxALL,5);
+		
+		# Fetch rssfeed
+		fetch_rssnews($self, "http://services.runescape.com/m=news/latest_news.rss");
+		
+		# Add scrollbars to the rssview if needed
+		setScrollBars($self->{rssview});
+	}
 	
 	# Add the sizers and panels together to form the layout
-	$self->{layoutsizer}->Add($self->{webview},1,wxEXPAND|wxALL,5);
-	$self->{layoutsizer}->Add($self->{verticalbuttons},0,wxEXPAND|wxALL,5);
+	$self->{verticalbuttons}->SetSizer($self->{buttonsizer});
+	$self->{layoutsizer}->Add($self->{verticalbuttons},1,wxEXPAND|wxALL,5);
+	# Make everything inside the mainsizer fit the window
+	$self->{layoutsizer}->Fit($self);
 	$self->{mainsizer}->Add($self->{tabcontrol},1,wxEXPAND|wxALL,0);
+	
+	# Add scrollbars to the verticalbuttons if needed
+	setScrollBars($self->{verticalbuttons});
 	
 	# Add scrollbars to the mainpanel if needed
 	setScrollBars($self->{mainpanel});
@@ -248,6 +314,42 @@ sub set_layout
 	$self->Layout;
 	# Refresh window
 	$self->Refresh;
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub OnPaint
+{
+	# Get passed data
+	my ($self, $event) = @_;
+	
+	# Create a painter
+	my $painter = Wx::ClientDC->new($self);
+	
+	# Get the painter width and height
+	my $width = $painter->GetSize()->x;
+	my $height = $painter->GetSize()->y;
+	
+	# Make variable to hold our image resource
+	my $image;
+	
+	# If we are on windows
+	if ($OS =~ /MSWin32/)
+	{
+		# Load the backgroundimage for the rss news
+		$image = Wx::Image->new("$cwd/modules/universal/rsu-launcher/bitmaps/bg.jpg", wxBITMAP_TYPE_JPEG);
+	}
+	# Else
+	else
+	{
+		# Load the backgroundimage for the rss news
+		$image = Wx::Image->new("$cwd/../../universal/rsu-launcher/bitmaps/bg.jpg", wxBITMAP_TYPE_JPEG);
+	}
+	
+	# Rescale the image to fit the scrollwindow
+	$painter->DrawBitmap(Wx::Bitmap->new($image->Rescale($width,$height)),0,0,0);
 }
 
 #
@@ -324,6 +426,177 @@ sub create_addons_page
 #---------------------------------------- *** ----------------------------------------
 #
 
+sub fetch_rssnews
+{
+	# Get the passed data
+	my ($self, $rssurl) = @_;
+	
+	# Make a vertical box sizer for use to organize the rss
+	$self->{rss_sizer} = Wx::BoxSizer->new(wxVERTICAL);
+	
+	# Fetch the recent activity rss feed
+	my $rssfeed = get($rssurl);
+	
+	# Make a hash reference for the RSSLite parser
+	my %rssnews;
+	
+	# Parse the RSSfeed
+	parseRSS(\%rssnews, \$rssfeed);
+	
+	# For each value in the array
+	foreach my $item (@{$rssnews{'item'}})
+	{
+		##### Generate Title #####
+		
+		# Get the news title text so we can format it
+		$rssTitle = "$item->{'title'}";
+		
+		# Fix some formating issues from html
+		$rssTitle =~ s/(&#8217;|&APOS;)/'/gi;
+		$rssTitle =~ s/(&#8211;)/-/gi;
+		$rssTitle =~ s/(&#13;&#10;)//gi;
+		
+		# If we are on mac or windows
+		if ($OS =~ /(darwin|MSWin32)/)
+		{
+			# fix the & on mac and windows
+			$rssTitle =~ s/(&amp;)/&&/gi;
+		}
+		# Else
+		else
+		{
+			# Fix the & on unix
+			$rssTitle =~ s/(&amp;)/&&&&/gi;
+		}
+		
+		# Make a title label for the news
+		my $newsTitle = Wx::StaticText->new($self->{rssview}, -1, "\n$rssTitle");
+		
+		# Make font bigger
+		$newsTitle->SetFont(Wx::Font->new(14, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, 0, "Times New Roman"));
+		
+		# If we are not on Windows or MaxOSX
+		if ($OS !~ /(MSWin32|darwin)/)
+		{
+			# Change the title color to the same color that Jagex use on news articles
+			$newsTitle->SetForegroundColour(Wx::Colour->new(243,177,63));
+		}
+		
+		# Add label to the sizer
+		$self->{rss_sizer}->Add($newsTitle, 0, wxEXPAND|wxALL, 5);
+		
+		##### Generate Date #####
+		
+		# Get the published date so we can remove the unused time
+		my $rssDate = "$item->{'pubDate'}";
+		
+		# Remove the timestamp because it is always 00:00:00 GMT
+		$rssDate =~ s/\s+\d{2,2}:\d{2,2}:\d{2,2}\s+GMT//g;
+		
+		# Make a date label for the news
+		my $newsDate = Wx::StaticText->new($self->{rssview}, -1, "Published: $rssDate");
+		
+		# If we are not on Windows or MaxOSX
+		if ($OS !~ /(MSWin32|darwin)/)
+		{
+			# Change the text color to the same color that Jagex use on news articles
+			$newsDate->SetForegroundColour(Wx::Colour->new(184,184,184));
+		}
+		
+		# Make font bigger
+		$newsDate->SetFont(Wx::Font->new(10, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL, 0));
+		
+		# Add label to the sizer
+		$self->{rss_sizer}->Add($newsDate, 0, wxEXPAND|wxLEFT, 25);
+		
+		##### Generate Description #####
+		
+		# Make a variable to contain the description because it needs fixing too
+		my $rssDescription = $item->{'description'};
+		
+		# Remove all tabs
+		$rssDescription =~ s/^\s+//g;
+		
+		# Replace all multiple whitespaces with normal whitespace
+		$rssDescription =~ s/\s+/ /g;
+		
+		# Fix some stuff in the finished activity list
+		$rssDescription =~ s/(&#8217;|&APOS;)/'/gi;
+		$rssDescription =~ s/(&#8211;)/-/gi;
+		$rssDescription =~ s/(&#13;&#10;)//gi;
+		
+		# If we are on mac or windows
+		if ($OS =~ /(darwin|MSWin32)/)
+		{
+			# fix the & on mac and windows
+			$rssDescription =~ s/(&amp;)/&&/gi;
+		}
+		# Else
+		else
+		{
+			# Fix the & on unix
+			$rssDescription =~ s/(&amp;)/&&&&&&&&/gi;
+		}
+		
+		# Make a date label for the news
+		my $newsDescription = Wx::StaticText->new($self->{rssview}, -1, "$rssDescription");
+		
+		# If we are not on Windows or MaxOSX
+		if ($OS !~ /(MSWin32|darwin)/)
+		{
+			# Change the text color to the same color that Jagex use on news articles
+			$newsDescription->SetForegroundColour(Wx::Colour->new(184,184,184));
+		}
+		
+		$newsDescription->Wrap(480);
+		
+		# Add label to the sizer
+		$self->{rss_sizer}->Add($newsDescription, 0, wxEXPAND|wxALL, 5);
+		
+		##### Generate Link #####
+		
+		# Make a hyperlink
+		my $rssLink = Wx::Button->new($self->{rssview}, wxID_ANY, "Read More..");
+		
+		# Add a tooltip showing the url to the article
+		$rssLink->SetToolTip("$item->{'link'}");
+		
+		# Connect the hyperlink to an event named hyperlink_clicked
+		EVT_BUTTON($rssLink, -1, \&hyperlink_clicked);
+		
+		# Add a link to the article to the sizer
+		$self->{rss_sizer}->Add($rssLink, 0, wxALL, 0);
+		
+		##### Generate Static Line #####
+		
+		# Add a static line to the sizer to nicely split the newsposts
+		$self->{rss_sizer}->Add(Wx::StaticLine->new($self->{rssview}, -1), 0, wxEXPAND|wxALL, 5);
+	}
+	
+	# Add the sizer to the rssview
+	$self->{rssview}->SetSizer($self->{rss_sizer});
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub hyperlink_clicked
+{
+	# Get pointers
+	my ($self, $event) = @_;
+	
+	# Get the URL we are supposed to launch
+	my $hyperlink = $event->GetEventObject()->GetToolTip()->GetTip();
+	
+	# Open the hyperlink url in the default web browser
+	Wx::LaunchDefaultBrowser("$hyperlink");
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
 sub make_addon_buttons
 {
 	# Get the passed data
@@ -383,7 +656,15 @@ sub setScrollBars
 	
 	# Set scroll properties
 	my $pixelsPerUnitX = 0; 
-    my $pixelsPerUnitY = 5; 
+	my $pixelsPerUnitY = 15; 
+	
+	# If we are using the rssfeed
+	if ("@ARGV" =~ /--rssfeed/)
+	{
+		# Scroll more pixels on the Y axis
+		$pixelsPerUnitY = 30;
+	}
+	
     my $noUnitsX = 0; 
     my $noUnitsY = 100; 
 	
@@ -416,8 +697,8 @@ sub make_button
 	my ($self, $button, $label) = @_;
 	
 	# Make a button for the launcher
-	$self->{$button} = Wx::Button->new($self->{mainpanel}, -1, "$label", wxDefaultPosition, wxDefaultSize, );
-	$self->{verticalbuttons}->Add($self->{$button},0,wxEXPAND|wxALL,5);
+	$self->{$button} = Wx::Button->new($self->{verticalbuttons}, -1, "$label");
+	$self->{buttonsizer}->Add($self->{$button},0,wxEXPAND|wxALL,5);
 	
 	# Make an event trigger for the newly created button
 	EVT_BUTTON($self->{$button}, -1, \&$button);
@@ -427,171 +708,222 @@ sub make_button
 #---------------------------------------- *** ----------------------------------------
 #
 
-sub playnow
+sub about
 {
-	# If we are not on windows
-	if ($OS !~ /MSWin32/)
-	{
-		# Run the runescape script
-		system "\"$cwd/../../../runescape\" &";
-	}
-	# Else
-	else
-	{
-		# Run the runescape executable
-		system (1,"\"$cwd/rsu-launcher.exe\" --script=runescape --showcmd=true");
-	}
-}
-
-#
-#---------------------------------------- *** ----------------------------------------
-#
-
-sub update
-{
+	## This function recreates the about dialog used in linux so that
+	## It will work the same on windows and mac too
+	
 	# Get the passed data
 	my ($self, $event) = @_;
 	
-	# If we are not on windows
-	if ($OS =~ /MSWin32/)
-	{
-		# Get the handle for the perl window
-		my $cmdwindow = Win32::GUI::GetPerlWindow();
-		# Show the cmd window
-		Win32::GUI::Show($cmdwindow);
-		
-		# Run the runescape executable
-		system "\"$cwd/rsu-launcher.exe\" --showcmd=true --script=update-runescape-client";
-		
-		# Show the cmd window again
-		Win32::GUI::Hide($cmdwindow);
-		
-		# Tell the user that they should close the launcher and run "Download-Windows-Files.exe" to finish the update
-		Wx::MessageBox("Finished running the updater!\nPlease close the Launcher and run the \"Download-Windows-Files.exe\"\nlocated in the client's folder to finish the update.", "Running update complete!", wxOK,$self);
-		
-	}
-	elsif ($OS =~ /darwin/)
-	{
-		# Run the update script
-		system "open \"$cwd/../../../update-runescape-client\" &";
-	}
-	# Else
-	else
-	{
-		# Run the update script
-		system "\"$cwd/../../../update-runescape-client\" &";
-	}
-}
-
-#
-#---------------------------------------- *** ----------------------------------------
-#
-
-sub settings
-{
-	# If we are not on windows
-	if ($OS !~ /MSWin32/)
-	{
-		# Run the runescape script
-		system "\"$cwd/../../../rsu-settings\" &";
-	}
-	# Else
-	else
-	{
-		# Run the runescape executable
-		system (1,"\"$cwd/rsu-launcher.exe\" --script=modules/settings --showcmd=true --usedpar=true");
-	}
-}
-
-#
-#---------------------------------------- *** ----------------------------------------
-#
-
-sub forums
-{
-	# If we are on MacOSX/Darwin
-	if ($OS =~ /darwin/)
-	{
-		# Run the runescape script
-		system "open \"http://services.runescape.com/m=forum/forums.ws\" &";
-	}
-	# Else if we are on windows
-	elsif($OS =~ /MSWin32/)
-	{
-		Win32::FileOp::ShellExecute("http://services.runescape.com/m=forum/forums.ws");
-	}
-	# Else
-	else
-	{
-		# Run the runescape executable
-		system "xdg-open \"http://services.runescape.com/m=forum/forums.ws\" &";
-	}
-}
-
-#
-#---------------------------------------- *** ----------------------------------------
-#
-
-sub linuxthread
-{
-	# If we are on MacOSX/Darwin
-	if ($OS =~ /darwin/)
-	{
-		# Open the thread in the users default web browser
-		system "open \"http://services.runescape.com/m=forum/forums.ws?25,26,99,61985129,goto,99999\" &";
-	}
-	# Else if we are on windows
-	elsif($OS =~ /MSWin32/)
-	{
-		# Open the thread in the users default web browser
-		Win32::FileOp::ShellExecute("http://services.runescape.com/m=forum/forums.ws?25,26,99,61985129,goto,99999");
-	}
-	# Else
-	else
-	{
-		# Open the thread in the users default web browser
-		system "xdg-open \"http://services.runescape.com/m=forum/forums.ws?25,26,99,61985129,goto,99999\" &";
-	}
-}
-
-#
-#---------------------------------------- *** ----------------------------------------
-#
-
-sub about
-{
-	my $self = shift;
+	# Make an object to contain the aboutframe
+	my $about = {};
 	
-	# Make the about dialog info
-	my $info = Wx::AboutDialogInfo->new;
+	# Make the aboutframe
+	$about->{dialog} = Wx::Dialog->new(undef, -1, "About RuneScape Unix Client");
 	
-	# Make a variable to contain the version number
-	my $version;
+	# Get the rsu version
+	my $version = get_rsuversion();
+	
+	# Prepare the interface sizers
+	$about->{vertical} = Wx::BoxSizer->new(wxVERTICAL);
+	$about->{horizontal} = Wx::BoxSizer->new(wxHORIZONTAL);
+	
+	# Else if we are not on windows and the icon exists
+	if ($OS !~ /MSWin32/ && -e "$cwd/../../../share/runescape.png")
+	{
+		# Set the window icon
+		$about->{dialog}->SetIcon(Wx::Icon->new("$cwd/../../../share/runescape.png", wxBITMAP_TYPE_PNG));
+		#$about->{dialog}->SetIcon($self->GetParent()->GetParent()->GetParent()->GetParent()->GetIcon());
+		
+		# Set the aboutdialog icon
+		$about->{icon} = Wx::StaticBitmap->new($about->{dialog}, -1, $self->GetParent()->GetParent()->GetParent()->GetParent()->GetIcon());
+		
+		# Set the size of the aboutdialog
+		$about->{dialog}->SetSize(365,375);
+		
+		# Add the aboutdialog icon to the dialog
+		$about->{vertical}->Add($about->{icon}, 0, wxALIGN_CENTER_HORIZONTAL|wxALL,0);
+	}
+	# Else
+	else
+	{
+		# Set the size of the aboutdialog
+		$about->{dialog}->SetSize(365,225);
+	}
+	
+	# Set max and min size of the aboutdialog
+	$about->{dialog}->SetMaxSize($about->{dialog}->GetSize);
+	$about->{dialog}->SetMinSize($about->{dialog}->GetSize);
+	
+	
+	# Create the Program name label
+	$about->{version} = Wx::StaticText->new($about->{dialog}, -1, "\nRuneScape Unix Client $version", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL);
+	
+	# Make the label the correct size
+	$about->{version}->SetFont(Wx::Font->new(15, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, 0));
+	
+	# Make a description label
+	$about->{description} = Wx::StaticText->new($about->{dialog}, -1, "\nThe Unofficial Universal Unix port of the RuneScape Downloadable Client for Windows", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL);
+	$about->{description}->Wrap(300);
 	
 	# If we are on windows
 	if ($OS =~ /MSWin32/)
 	{
-		# Launch the runescape script and get the version
-		$version = `"$cwd/rsu-launcher" --script=runescape --showcmd=true --version`;
+		# Make the copyright line (windows cannot read \xc2)
+		$about->{copyright} = Wx::StaticText->new($about->{dialog}, -1, "\n\xa9 2011-2013 HikariKnight\n", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL);
 	}
 	# Else
 	else
 	{
-		# Launch the runescape script and get the version
-		$version = `"$cwd/../../../runescape" --version`;
+		# Make the copyright line
+		$about->{copyright} = Wx::StaticText->new($about->{dialog}, -1, "\n\xc2\xa9 2011-2013 HikariKnight\n", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL);
 	}
 	
-	# Use regular expression to get only the version number
-	$version =~ s/.+version\s+(\d{1,1}\.\d{1,1}\.\d{1,1})\s+/$1/;
+	# Set the correct font size
+	$about->{copyright}->SetFont(Wx::Font->new(8, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL, 0));
+	
+	# Make a hyperlink to the sourcecode/projectpage
+	$about->{website} = Wx::Button->new($about->{dialog}, -1, 'Get the &sourcecode from GitHub.com');
+	$about->{website}->SetToolTip("https://github.com/HikariKnight/rsu-client");
+	# Make an event for the get source button
+	EVT_BUTTON($about->{website}, -1, \&hyperlink_clicked);
+	
+	# Make buttons for the bottom of the about dialog (with hotkeys support &key = alt+key)
+	# And make the events for the buttons
+	$about->{credits} = Wx::Button->new($about->{dialog}, -1, 'C&redits');
+	EVT_BUTTON($about->{credits}, -1, \&about_credits);
+	$about->{license} = Wx::Button->new($about->{dialog}, -1, '&License');
+	EVT_BUTTON($about->{license}, -1, \&about_license);
+	$about->{close} = Wx::Button->new($about->{dialog}, -1, '&Close');
+	EVT_BUTTON($about->{close}, -1, \&about_close);
+	
+	# Add the buttons to the horizontal sizer
+	$about->{horizontal}->Add($about->{credits}, 0, wxALL, 2);
+	$about->{horizontal}->Add($about->{license}, 0, wxALL, 2);
+	$about->{horizontal}->Add(70,10,10,wxALL|wxEXPAND,0);
+	$about->{horizontal}->Add($about->{close}, 0, wxALL, 2);
+	
+	# Add everything to the vertical sizer
+	$about->{vertical}->Add($about->{version}, 0, wxALIGN_CENTER_HORIZONTAL|wxALL,0);
+	$about->{vertical}->Add($about->{description}, 0, wxALIGN_CENTER_HORIZONTAL|wxALL,0);
+	$about->{vertical}->Add($about->{copyright}, 0, wxALIGN_CENTER_HORIZONTAL|wxALL,0);
+	$about->{vertical}->Add($about->{website}, 0, wxALIGN_CENTER_HORIZONTAL|wxALL,0);
+	
+	# Set the sizers
+	$about->{vertical}->Add($about->{horizontal}, 0, wxALIGN_CENTER_HORIZONTAL|wxALL,0);
+	$about->{dialog}->SetSizer($about->{vertical});
+	
+	# Show the dialog
+	$about->{dialog}->ShowModal();
+	
+	# Destroy the object when the user closes the window
+	$about->{dialog}->Destroy;
+}
 
-	# Add info to the about dialog
-	$info->SetName( 'RuneScape Unix Client' );
-    $info->SetVersion( $version );
-    $info->SetDescription( 'The Unofficial Universal Unix port of the RuneScape Downloadable Client for Windows' );
-    $info->SetCopyright( '(c) 2011-2013 HikariKnight' );
-    $info->SetWebSite( 'https://github.com/HikariKnight/rsu-client', 'Get the sourcecode from GitHub.com' );
-    $info->SetDevelopers( ['HikariKnight - Main developer', '', '### Contributors ###', 'Ker Laeda - AUR Repository maintainer', 'Garage Punk - forcepulseaudio code', 'Jmb71 - findjavalib regex', 'Ethoxyethaan - original launch script for Linux', 'Fallen_Unia - Zenity support in the Updater' ] );
-    $info->SetLicense("            GNU GENERAL PUBLIC LICENSE
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub about_credits
+{
+	# Get the passed data
+	my ($about, $event) = @_;
+	
+	# Make an object for the license window
+	my $credits = {};
+	
+	# Add credits to the object
+	$credits->{writtenby} = "HikariKnight - <mu.antilag\@gmail.com>";
+	$credits->{artworkby} = "none so far";
+	$credits->{contributors} = "Ker Laeda - AUR Repository maintainer \nGarage Punk - forcepulseaudio code \nJmb71 - findjavalib regex \nEthoxyethaan - original launch script for Linux \nFallen_Unia - Zenity support in the Updater";
+	
+	# Make the dialog window
+	$credits->{dialog} = Wx::Dialog->new(undef, -1, "Credits");
+	
+	# Make a tab window
+	$credits->{tabwindow} = Wx::Notebook->new($credits->{dialog}, -1);
+	
+	# Make a gridsizer for the tabwindow
+	$credits->{mainsizer} = Wx::BoxSizer->new(wxVERTICAL);
+	
+	# Make tabs
+	about_credits_maketab($credits, $credits->{writtenby}, "Written By");
+	about_credits_maketab($credits, $credits->{contributors}, "Contributors");
+	#about_credits_maketab($credits, $credits->{artworkby}, "Artwork By");
+	
+	# Make the close button and make it close the window when clicked
+	$credits->{close} = Wx::Button->new($credits->{dialog}, -1, "Close");
+	EVT_BUTTON($credits->{close}, -1, \&about_close);
+	
+	# Add stuff to the window
+	$credits->{mainsizer}->Add($credits->{tabwindow},1,wxEXPAND|wxALL,5);
+	$credits->{mainsizer}->Add($credits->{close},0,wxALIGN_RIGHT,0);
+	$credits->{dialog}->SetSizer($credits->{mainsizer});
+	
+	# Set size of the window
+	$credits->{dialog}->SetSize(350,300);
+	
+	# Show the window
+	$credits->{dialog}->ShowModal;
+	$credits->{dialog}->Destroy;
+	
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub about_credits_maketab
+{
+	# Get the passed data
+	my ($credits, $names, $tabname) = @_;
+	
+	# Make the page
+	$page = Wx::Panel->new($credits->{tabwindow}, -1);
+	
+	# Make a gridsizer
+	$grid = Wx::GridSizer->new(1,1,0,0);
+	
+	# Make a textcontrol
+	$textcontrol = Wx::TextCtrl->new($page,-1,"$names",wxDefaultPosition,wxDefaultSize,wxTE_READONLY|wxTE_MULTILINE);
+	
+	# Add the textcontrol to the sizer
+	$grid->Add($textcontrol, 0, wxALL|wxEXPAND, 5);
+	
+	# Add the sizer to the page
+	$page->SetSizer($grid);
+	
+	# Add page to tabwindow
+	$credits->{tabwindow}->AddPage($page,$tabname);
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub about_license
+{
+	# Get the passed data
+	my ($about, $event) = @_;
+	
+	# Make an object for the license window
+	my $license = {};
+	
+	# Make the dialog window
+	$license->{dialog} = Wx::Dialog->new(undef, -1, "License");
+	
+	# Make a scrolledwindow
+	$license->{scroll} = Wx::ScrolledWindow->new($license->{dialog}, -1);
+	
+	# Make a flexgrid sizer with 1 column and 2 rows (works better for this purpose)
+	$license->{vertical} = Wx::BoxSizer->new(wxVERTICAL);
+	
+	# Make a gridsizer for the scrolledwindow to contain the label
+	$license->{scrollgrid} = Wx::GridSizer->new(1,1,0,0);
+	
+	# Make label to with the license text (so much text!)
+	$license->{text} = Wx::TextCtrl->new($license->{scroll}, -1, "            GNU GENERAL PUBLIC LICENSE
                Version 2, June 1991
 
  Copyright (C) 1989, 1991 Free Software Foundation, Inc.
@@ -870,7 +1202,198 @@ YOU OR THIRD PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE WITH ANY OTHER
 PROGRAMS), EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGES.
 
-             END OF TERMS AND CONDITIONS");
+             END OF TERMS AND CONDITIONS",wxDefaultPosition,wxDefaultSize,wxTE_READONLY|wxTE_MULTILINE);
+	
+	# Make a close button and connect it to an event
+	$license->{close} = Wx::Button->new($license->{dialog}, -1, "Close");
+	EVT_BUTTON($license->{close}, -1, \&about_close);
+	
+	# Add everything to the sizer
+	$license->{scrollgrid}->Add($license->{text}, 1, wxALL|wxEXPAND, 5);
+	$license->{scroll}->SetSizer($license->{scrollgrid});
+	$license->{vertical}->Add($license->{scroll}, 1, wxALL|wxEXPAND, 5);
+	$license->{vertical}->Add($license->{close}, 0, wxALL|wxALIGN_RIGHT, 5);
+	$license->{dialog}->SetSizer($license->{vertical});
+	
+	# Set size of the dialog
+	$license->{dialog}->SetSize(600,465);
+	$license->{dialog}->SetMinSize($license->{dialog}->GetSize());
+	$license->{dialog}->SetMaxSize($license->{dialog}->GetSize());
+	
+	setScrollBars($license->{scroll});
+	
+	# Show the dialog
+	$license->{dialog}->ShowModal;
+	$license->{dialog}->Destroy;
+	
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub about_close
+{
+	# Get the passed data
+	my ($about, $event) = @_;
+	
+	# Close the about dialog
+	$about->GetParent()->Destroy;
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub get_rsuversion
+{
+	# Make a variable to contain the version number
+	my $version;
+	
+	# If we are on windows
+	if ($OS =~ /MSWin32/)
+	{
+		# Launch the runescape script and get the version
+		$version = `"$cwd/rsu-launcher" --script=runescape --showcmd=true --version`;
+	}
+	# Else
+	else
+	{
+		# Launch the runescape script and get the version
+		$version = `"$cwd/../../../runescape" --version`;
+	}
+	
+	# Use regular expression to get only the version number
+	$version =~ s/.+version\s+(\d{1,1}\.\d{1,1}\.\d{1,1})\s+/$1/;
+	
+	# Return the result
+	return $version;
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+
+
+sub playnow
+{
+	# If we are not on windows
+	if ($OS !~ /MSWin32/)
+	{
+		# Run the runescape script
+		system "\"$cwd/../../../runescape\" &";
+	}
+	# Else
+	else
+	{
+		# Run the runescape executable
+		system (1,"\"$cwd/rsu-launcher.exe\" --script=runescape --showcmd=true");
+	}
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub update
+{
+	# Get the passed data
+	my ($self, $event) = @_;
+	
+	# If we are not on windows
+	if ($OS =~ /MSWin32/)
+	{
+		# Get the handle for the perl window
+		my $cmdwindow = Win32::GUI::GetPerlWindow();
+		# Show the cmd window
+		Win32::GUI::Show($cmdwindow);
+		
+		# Run the runescape executable
+		system "\"$cwd/rsu-launcher.exe\" --showcmd=true --script=update-runescape-client";
+		
+		# Show the cmd window again
+		Win32::GUI::Hide($cmdwindow);
+		
+		# Tell the user that they should close the launcher and run "Download-Windows-Files.exe" to finish the update
+		Wx::MessageBox("Finished running the updater!\nPlease close the Launcher and run the \"Download-Windows-Files.exe\"\nlocated in the client's folder to finish the update.", "Running update complete!", wxOK,$self);
+		
+	}
+	elsif ($OS =~ /darwin/)
+	{
+		# Run the update script
+		system "open \"$cwd/../../../update-runescape-client\" &";
+	}
+	# Else
+	else
+	{
+		# Run the update script
+		system "\"$cwd/../../../update-runescape-client\" &";
+	}
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub settings
+{
+	# If we are not on windows
+	if ($OS !~ /MSWin32/)
+	{
+		# Run the runescape script
+		system "\"$cwd/../../../rsu-settings\" &";
+	}
+	# Else
+	else
+	{
+		# Run the runescape executable
+		system (1,"\"$cwd/rsu-launcher.exe\" --script=modules/settings --showcmd=true --usedpar=true");
+	}
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub forums
+{
+	# Open the forums in the default web browser
+	Wx::LaunchDefaultBrowser("http://services.runescape.com/m=forum/forums.ws");
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub linuxthread
+{
+	# Open the linux thread in the default web browser
+	Wx::LaunchDefaultBrowser("http://services.runescape.com/m=forum/forums.ws?25,26,99,61985129,goto,99999");
+}
+
+#
+#---------------------------------------- *** ----------------------------------------
+#
+
+sub about_FALLBACK
+{
+	my $self = shift;
+	
+	# Make the about dialog info
+	my $info = Wx::AboutDialogInfo->new;
+	
+	# Make a variable to contain the version number and also get the version number
+	my $version = get_rsuversion();
+
+	# Add info to the about dialog
+	$info->SetName( 'RuneScape Unix Client' );
+    $info->SetVersion( $version );
+    $info->SetDescription( 'The Unofficial Universal Unix port of the RuneScape Downloadable Client for Windows' );
+    $info->SetCopyright( '(c) 2011-2013 HikariKnight' );
+    $info->SetWebSite( 'https://github.com/HikariKnight/rsu-client', 'Get the sourcecode from GitHub.com' );
+    $info->SetDevelopers( ['HikariKnight - Main developer\n', '### Contributors ###\n', 'Ker Laeda - AUR Repository maintainer', 'Garage Punk - forcepulseaudio code', 'Jmb71 - findjavalib regex', 'Ethoxyethaan - original launch script for Linux', 'Fallen_Unia - Zenity support in the Updater' ] );
+    $info->SetLicense("This program is available under the terms of the GPLv2 License\nSee the file COPYING for more information.");
 
     $info->SetArtists( [ 'None' ] );
 
@@ -1063,4 +1586,3 @@ package main;
 
 my $app = application->new;
 $app->MainLoop;
-
