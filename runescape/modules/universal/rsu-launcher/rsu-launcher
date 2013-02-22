@@ -195,12 +195,13 @@ sub set_layout
 		if ($OS !~ /(MSWin32|darwin)/)
 		{
 			# Make a painting event
-			EVT_PAINT( $self->{rssview}, \&OnPaint );
+			#EVT_PAINT( $self->{rssview}, \&OnPaint );
+			$self->{rssview}->SetBackgroundColour(wxBLACK);
 		}
 	}
 	
-	# Create the flexsizer needed for the layout
-	$self->{layoutsizer} = Wx::BoxSizer->new(wxHORIZONTAL);#Wx::FlexGridSizer->new(1,2,0,0);
+	# Create the boxsizer needed for the layout
+	$self->{layoutsizer} = Wx::BoxSizer->new(wxHORIZONTAL);
 	
 	# Make a vertical box sizer for use to organize buttons
 	$self->{buttonsizer} = Wx::BoxSizer->new(wxVERTICAL);
