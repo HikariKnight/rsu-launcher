@@ -211,6 +211,7 @@ sub set_layout
 	
 	# Make buttons
 	make_button($self, "playnow", "&Play Now");
+	make_button($self, "playoldschool", "Play &OldSchool");
 	make_button($self, "update", "Run &Updater");
 	make_button($self, "settings", "&Settings");
 	make_button($self, "forums", "RS &Forums");
@@ -1274,7 +1275,25 @@ sub get_rsuversion
 #---------------------------------------- *** ----------------------------------------
 #
 
+sub playoldschool
+{
+	# If we are not on windows
+	if ($OS !~ /MSWin32/)
+	{
+		# Run the runescape script
+		system "\"$cwd/../../../runescape\" --prmfile=oldschool.prm &";
+	}
+	# Else
+	else
+	{
+		# Run the runescape executable
+		system (1,"\"$cwd/rsu-launcher.exe\" --script=runescape --showcmd=true --prmfile=oldschool.prm");
+	}
+}
 
+#
+#---------------------------------------- *** ----------------------------------------
+#
 
 sub playnow
 {
