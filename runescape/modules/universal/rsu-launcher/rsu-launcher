@@ -321,42 +321,6 @@ sub set_layout
 #---------------------------------------- *** ----------------------------------------
 #
 
-sub OnPaint
-{
-	# Get passed data
-	my ($self, $event) = @_;
-	
-	# Create a painter
-	my $painter = Wx::ClientDC->new($self);
-	
-	# Get the painter width and height
-	my $width = $painter->GetSize()->x;
-	my $height = $painter->GetSize()->y;
-	
-	# Make variable to hold our image resource
-	my $image;
-	
-	# If we are on windows
-	if ($OS =~ /MSWin32/)
-	{
-		# Load the backgroundimage for the rss news
-		$image = Wx::Image->new("$cwd/modules/universal/rsu-launcher/bitmaps/bg.jpg", wxBITMAP_TYPE_JPEG);
-	}
-	# Else
-	else
-	{
-		# Load the backgroundimage for the rss news
-		$image = Wx::Image->new("$cwd/../../universal/rsu-launcher/bitmaps/bg.jpg", wxBITMAP_TYPE_JPEG);
-	}
-	
-	# Rescale the image to fit the scrollwindow
-	$painter->DrawBitmap(Wx::Bitmap->new($image->Rescale($width,$height)),0,0,0);
-}
-
-#
-#---------------------------------------- *** ----------------------------------------
-#
-
 sub create_addons_page
 {
 	# Get the passed data
@@ -1412,7 +1376,24 @@ sub about_FALLBACK
     $info->SetCopyright( '(c) 2011-2013 HikariKnight' );
     $info->SetWebSite( 'https://github.com/HikariKnight/rsu-client', 'Get the sourcecode from GitHub.com' );
     $info->SetDevelopers( ['HikariKnight - Main developer\n', '### Contributors ###\n', 'Ker Laeda - AUR Repository maintainer', 'Garage Punk - forcepulseaudio code', 'Jmb71 - findjavalib regex', 'Ethoxyethaan - original launch script for Linux', 'Fallen_Unia - Zenity support in the Updater' ] );
-    $info->SetLicense("This program is available under the terms of the GPLv2 License\nSee the file COPYING for more information.");
+    $info->SetLicense("GNU General Public License Version2
+Copyright (C) 2011-2013  HikariKnight
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+See the file COPYING for more information.");
 
     $info->SetArtists( [ 'None' ] );
 
